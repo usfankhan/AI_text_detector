@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TextScan — AI Detection & Humanizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a25;
+    --border: #2a2a3d;
+    --accent: #00e5ff;
+    --accent2: #ff6b6b;
+    --accent3: #a78bfa;
+    --text: #e8e8f0;
+    --muted: #6b6b85;
+    --green: #00ff9d;
+    --red: #ff4466;
+    --yellow: #ffcc44;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .glow-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(100px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb1 { width: 500px; height: 500px; background: rgba(0,229,255,0.07); top: -100px; right: -100px; }
+  .orb2 { width: 400px; height: 400px; background: rgba(167,139,250,0.07); bottom: -100px; left: -100px; }
+
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 28px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .logo span { color: var(--accent); }
+
+  .badge {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  main {
+    position: relative;
+    z-index: 10;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  .hero {
+    text-align: center;
+    margin-bottom: 52px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.2rem, 5vw, 3.6rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+  }
+
+  .hero h1 em {
+    font-style: normal;
+    color: var(--accent);
+    position: relative;
+  }
+
+  .hero p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.7;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 24px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .tab-btn.active {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* Panels */
+  .panel {
+    display: none;
+    animation: fadeUp 0.3s ease both;
+  }
+  .panel.active { display: block; }
+
+  .textarea-wrap {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    padding: 20px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  .char-count {
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 28px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    border: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Results */
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .result-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .result-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .verdict {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .verdict.ai { color: var(--red); }
+  .verdict.human { color: var(--green); }
+  .verdict.mixed { color: var(--yellow); }
+
+  /* Meter */
+  .meter-wrap {
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .meter-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .meter-bar {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 100px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .meter-fill {
+    height: 100%;
+    border-radius: 100px;
+    transition: width 1s cubic-bezier(0.4,0,0.2,1);
+    background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
+  }
+
+  .score-big {
+    font-family: 'Syne', sans-serif;
+    font-size: 3rem;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .score-sub {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Feature stats */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--border);
+  }
+
+  .feature-cell {
+    background: var(--surface);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .feature-name {
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .feature-bar-wrap {
+    height: 3px;
+    background: var(--surface2);
+    border-radius: 100px;
+    overflow: hidden;
+  }
+
+  .feature-bar {
+    height: 100%;
+    border-radius: 100px;
+    background: var(--accent);
+    transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .feature-val {
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  /* Humanized output */
+  .output-box {
+    padding: 24px;
+  }
+
+  .output-text {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    font-size: 0.85rem;
+    line-height: 1.8;
+    color: var(--text);
+    min-height: 160px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .copy-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    gap: 10px;
+  }
+
+  /* Loader */
+  .loader {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  .loader.light {
+    border-color: rgba(255,255,255,0.2);
+    border-top-color: var(--accent);
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .info-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .chip {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 100px;
+    border: 1px solid;
+  }
+  .chip.warning { color: var(--yellow); border-color: rgba(255,204,68,0.3); background: rgba(255,204,68,0.05); }
+  .chip.danger  { color: var(--red);    border-color: rgba(255,68,102,0.3);  background: rgba(255,68,102,0.05); }
+  .chip.ok      { color: var(--green);  border-color: rgba(0,255,157,0.3);   background: rgba(0,255,157,0.05); }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+  }
+  .empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+  .notice {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 24px;
+    line-height: 1.6;
+    padding: 0 24px;
+  }
+  .notice a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 600px) {
+    header { padding: 20px 20px; }
+    main { padding: 32px 16px 60px; }
+    .hero h1 { font-size: 2rem; }
+    .features-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="glow-orb orb1"></div>
+<div class="glow-orb orb2"></div>
+
+<header>
+  <div class="logo">Text<span>Scan</span></div>
+  <div class="badge">AI Detection Engine</div>
+</header>
+
+<main>
+  <div class="hero">
+    <h1>Detect & <em>Humanize</em><br>AI-Written Text</h1>
+    <p>Advanced linguistic analysis to identify AI-generated content and transform it into natural, human-sounding prose.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('detect')">🔍 Detect AI</button>
+    <button class="tab-btn" onclick="switchTab('humanize')">✏️ Humanize Text</button>
+  </div>
+
+  <!-- DETECT PANEL -->
+  <div class="panel active" id="panel-detect">
+    <div class="textarea-wrap">
+      <textarea id="detect-input" placeholder="Paste your text here to analyze for AI generation... (minimum 50 characters)" oninput="updateCharCount('detect-input','detect-count')"></textarea>
+      <span class="char-count" id="detect-count">0 chars</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="detect-btn" onclick="runDetection()">
+        <span id="detect-btn-inner">Analyze Text</span>
+      </button>
+      <button class="btn btn-ghost" onclick="clearDetect()">Clear</button>
+      <button class="btn btn-ghost" onclick="loadSample('detect')">Load Sample</button>
+    </div>
+    <div id="detect-result"></div>
+  </div>
+
+  <!-- HUMANIZE PANEL -->
+  <div class="panel" id="panel-humanize">
+    <div class="textarea-wrap">
+      <textarea id="humanize-input" placeholder="Paste AI-generated text here to convert it to natural, human-sounding prose..." oninput="updateCharCount('humanize-input','humanize-count')"></textarea>
+      <span class="char-count" id="humanize-count">0 chars</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="humanize-btn" onclick="runHumanize()">
+        <span id="humanize-btn-inner">Humanize Text</span>
+      </button>
+      <button class="btn btn-ghost" onclick="clearHumanize()">Clear</button>
+      <button class="btn btn-ghost" onclick="loadSample('humanize')">Load Sample</button>
+    </div>
+    <div id="humanize-result"></div>
+  </div>
+
+  <p class="notice">
+    This tool uses heuristic linguistic analysis. Results are probabilistic, not definitive.<br>
+    For best accuracy, use texts of 100+ words. &nbsp;|&nbsp; Built with the <a href="https://anthropic.com" target="_blank">Claude API</a>.
+  </p>
+</main>
+
+<script>
+const SAMPLES = {
+  ai: `In today's rapidly evolving digital landscape, it is imperative that organizations leverage cutting-edge technologies to remain competitive. The integration of artificial intelligence into business processes has proven to be a transformative force, enabling companies to optimize their operations and enhance customer experiences. Furthermore, by harnessing the power of data-driven insights, businesses can make more informed decisions, ultimately driving growth and innovation. It is worth noting that this paradigm shift requires a comprehensive strategy and robust implementation framework to achieve sustainable success.`,
+  human: `I've been thinking a lot about my grandmother's kitchen lately. It wasn't fancy—linoleum floors, a rickety table with mismatched chairs—but God, it smelled incredible. She'd wake up at 5am to start the bread, and by the time we stumbled downstairs, the whole house was warm and yeasty. I can't replicate it. I've tried her recipe a dozen times and something's always off. Maybe it's the oven, or maybe it's just that food tastes different when someone who loves you makes it.`
+};
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0&&tab==='detect')||(i===1&&tab==='humanize')));
+  document.getElementById('panel-detect').classList.toggle('active', tab==='detect');
+  document.getElementById('panel-humanize').classList.toggle('active', tab==='humanize');
+}
+
+function updateCharCount(inputId, countId) {
+  const len = document.getElementById(inputId).value.length;
+  document.getElementById(countId).textContent = len + ' chars';
+}
+
+function loadSample(panel) {
+  if (panel === 'detect') {
+    document.getElementById('detect-input').value = SAMPLES.ai;
+    updateCharCount('detect-input','detect-count');
+  } else {
+    document.getElementById('humanize-input').value = SAMPLES.ai;
+    updateCharCount('humanize-input','humanize-count');
+  }
+}
+
+function clearDetect() {
+  document.getElementById('detect-input').value = '';
+  document.getElementById('detect-count').textContent = '0 chars';
+  document.getElementById('detect-result').innerHTML = '';
+}
+
+function clearHumanize() {
+  document.getElementById('humanize-input').value = '';
+  document.getElementById('humanize-count').textContent = '0 chars';
+  document.getElementById('humanize-result').innerHTML = '';
+}
+
+// ── AI Detection Logic ────────────────────────────────────────
+function analyzeText(text) {
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  const words = text.toLowerCase().match(/\b\w+\b/g) || [];
+  const wordCount = words.length;
+
+  if (wordCount < 10) return null;
+
+  // 1. Perplexity-like: avg sentence length & variance
+  const sentLengths = sentences.map(s => s.trim().split(/\s+/).length);
+  const avgSentLen = sentLengths.reduce((a,b)=>a+b,0)/sentLengths.length;
+  const sentVariance = sentLengths.reduce((a,b)=>a+Math.pow(b-avgSentLen,2),0)/sentLengths.length;
+
+  // 2. AI buzzwords & transitional phrases
+  const aiPhrases = [
+    'in today','it is important','it is worth noting','it is imperative','in conclusion',
+    'furthermore','moreover','additionally','in summary','to summarize','in the realm',
+    'leverag','cutting-edge','paradigm','robust','compreh','imperat','landscape',
+    'revolutioniz','transform','seamless','delve','it should be noted','as a result',
+    'consequently','therefore','this means that','in other words','to achieve','ensure',
+    'facilitate','utilize','optimize','implementation','framework','innovative solution',
+    'drive growth','remain competitive','data-driven','make informed decision'
+  ];
+  const aiPhraseHits = aiPhrases.filter(p => text.toLowerCase().includes(p)).length;
+  const aiPhraseScore = Math.min(aiPhraseHits / 8, 1);
+
+  // 3. Vocabulary richness
+  const uniqueWords = new Set(words);
+  const lexRichness = uniqueWords.size / wordCount; // lower = more repetitive = more AI-like
+
+  // 4. Passive voice ratio
+  const passiveMatches = (text.match(/\b(is|are|was|were|be|been|being)\s+\w+ed\b/gi) || []).length;
+  const passiveRatio = passiveMatches / sentences.length;
+
+  // 5. Punctuation variety
+  const hasContractions = /\b\w+'(t|re|ve|ll|d|s)\b/.test(text);
+  const hasCasualMarkers = /\b(yeah|ok|honestly|actually|like|just|really|anyway|stuff|things|bit|kinda|gonna|wanna)\b/i.test(text);
+  const hasPersonalPronouns = /\b(I |I'm|I've|my |me |we |our )\b/.test(text);
+  const hasParenthetical = /[()—–]/.test(text);
+
+  // 6. Sentence uniformity (AI tends to have uniform structure)
+  const sentLenNorm = sentVariance < 20 ? 0.7 : sentVariance < 50 ? 0.4 : 0.1;
+
+  // Compute weighted AI probability
+  let aiProb = 0;
+  aiProb += aiPhraseScore * 40;
+  aiProb += (1 - Math.min(lexRichness * 2, 1)) * 15;
+  aiProb += Math.min(passiveRatio * 20, 15);
+  aiProb += sentLenNorm * 15;
+  aiProb += avgSentLen > 22 ? 10 : avgSentLen > 18 ? 5 : 0;
+  aiProb -= hasContractions ? 8 : 0;
+  aiProb -= hasCasualMarkers ? 8 : 0;
+  aiProb -= hasPersonalPronouns ? 6 : 0;
+  aiProb += hasParenthetical ? -3 : 0;
+
+  aiProb = Math.max(2, Math.min(97, aiProb));
+
+  return {
+    aiProb: Math.round(aiProb),
+    features: {
+      'AI Phrases':       Math.round(aiPhraseScore * 100),
+      'Sentence Uniformity': Math.round(sentLenNorm * 100),
+      'Passive Voice':    Math.round(Math.min(passiveRatio * 100, 100)),
+      'Avg Sentence Len': Math.round(Math.min((avgSentLen / 30) * 100, 100)),
+      'Low Lex Richness': Math.round((1 - Math.min(lexRichness * 2, 1)) * 100),
+    },
+    chips: [
+      hasContractions   ? { label: 'Contractions found', cls: 'ok' }     : { label: 'No contractions', cls: 'warning' },
+      hasCasualMarkers  ? { label: 'Casual language', cls: 'ok' }         : { label: 'Formal tone', cls: 'warning' },
+      hasPersonalPronouns ? { label: 'Personal voice', cls: 'ok' }        : { label: 'Impersonal voice', cls: 'warning' },
+      aiPhraseHits > 5  ? { label: 'High AI phrase density', cls: 'danger'} : null,
+      sentVariance < 15 ? { label: 'Uniform sentence structure', cls: 'danger'} : null,
+    ].filter(Boolean)
+  };
+}
+
+async function runDetection() {
+  const text = document.getElementById('detect-input').value.trim();
+  if (text.length < 50) {
+    alert('Please enter at least 50 characters for analysis.');
+    return;
+  }
+
+  const btn = document.getElementById('detect-btn');
+  const inner = document.getElementById('detect-btn-inner');
+  btn.disabled = true;
+  inner.innerHTML = '<span class="loader"></span> Analyzing...';
+
+  // Simulate async analysis
+  await new Promise(r => setTimeout(r, 1200));
+
+  const result = analyzeText(text);
+  btn.disabled = false;
+  inner.textContent = 'Analyze Text';
+
+  if (!result) {
+    document.getElementById('detect-result').innerHTML = '<div class="empty-state"><div>⚠️</div>Text too short for reliable analysis.</div>';
+    return;
+  }
+
+  const { aiProb, features, chips } = result;
+  const verdict = aiProb >= 70 ? 'ai' : aiProb >= 40 ? 'mixed' : 'human';
+  const verdictLabel = verdict === 'ai' ? '🤖 Likely AI-Generated' : verdict === 'mixed' ? '🔀 Mixed / Uncertain' : '✅ Likely Human-Written';
+
+  const featureCells = Object.entries(features).map(([name, val]) => `
+    <div class="feature-cell">
+      <div class="feature-name">${name}</div>
+      <div class="feature-bar-wrap"><div class="feature-bar" style="width:0%" data-target="${val}%"></div></div>
+      <div class="feature-val">${val}%</div>
+    </div>
+  `).join('');
+
+  const chipHtml = chips.map(c => `<span class="chip ${c.cls}">${c.label}</span>`).join('');
+
+  document.getElementById('detect-result').innerHTML = `
+    <div class="result-card">
+      <div class="result-header">
+        <div>
+          <div class="result-label">Detection Result</div>
+          <div class="verdict ${verdict}" style="margin-top:6px">${verdictLabel}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="result-label">AI Score</div>
+          <div style="font-family:'Syne',sans-serif;font-size:2.5rem;font-weight:800;color:${aiProb>=70?'var(--red)':aiProb>=40?'var(--yellow)':'var(--green)'}">${aiProb}%</div>
+        </div>
+      </div>
+      <div class="meter-wrap">
+        <div class="meter-labels"><span>Human</span><span>AI Generated</span></div>
+        <div class="meter-bar"><div class="meter-fill" id="main-meter" style="width:0%"></div></div>
+        <div class="score-sub">AI probability based on linguistic patterns</div>
+      </div>
+      <div class="features-grid">${featureCells}</div>
+      <div class="info-chips">${chipHtml}</div>
+    </div>
+  `;
+
+  // Animate bars
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      document.getElementById('main-meter').style.width = aiProb + '%';
+      document.querySelectorAll('.feature-bar').forEach(bar => {
+        bar.style.width = bar.dataset.target;
+      });
+    }, 50);
+  });
+}
+
+// ── Humanizer ─────────────────────────────────────────────────
+function humanizeText(text) {
+  // Heuristic rule-based humanizer
+  let out = text;
+
+  // Replace formal phrases with casual equivalents
+  const replacements = [
+    [/\bIn today's (rapidly evolving|modern|digital) (landscape|world|era)/gi, "These days"],
+    [/\bIt is (important|imperative|crucial|essential) (to|that)/gi, "You need to"],
+    [/\bIt is worth noting that\b/gi, "Worth mentioning:"],
+    [/\bFurthermore,?\b/gi, "Also,"],
+    [/\bMoreover,?\b/gi, "On top of that,"],
+    [/\bAdditionally,?\b/gi, "Plus,"],
+    [/\bIn conclusion,?\b/gi, "To wrap up,"],
+    [/\bTo summarize,?\b/gi, "In short,"],
+    [/\bIn summary,?\b/gi, "So basically,"],
+    [/\bLeverage\b/gi, "use"],
+    [/\bLeveraging\b/gi, "using"],
+    [/\bUtilize\b/gi, "use"],
+    [/\bUtilization\b/gi, "use"],
+    [/\bOptimize\b/gi, "improve"],
+    [/\bOptimizing\b/gi, "improving"],
+    [/\bFacilitate\b/gi, "help"],
+    [/\bImplementation\b/gi, "rollout"],
+    [/\bRobust\b/gi, "solid"],
+    [/\bCutting-edge\b/gi, "new"],
+    [/\bInnovative solutions?\b/gi, "fresh ideas"],
+    [/\bParadigm shift\b/gi, "big change"],
+    [/\bTransformative force\b/gi, "game changer"],
+    [/\bData-driven insights?\b/gi, "what the data shows"],
+    [/\bRemain competitive\b/gi, "keep up"],
+    [/\bDrive growth\b/gi, "grow"],
+    [/\bIn the realm of\b/gi, "when it comes to"],
+    [/\bEnhance\b/gi, "improve"],
+    [/\bComprehensive (strategy|framework|approach)/gi, "solid plan"],
+    [/\bSustainable success\b/gi, "long-term success"],
+    [/\bIt should be noted that\b/gi, "Note that"],
+    [/\bConsequently,?\b/gi, "So,"],
+    [/\bTherefore,?\b/gi, "So,"],
+    [/\bAs a result,?\b/gi, "Because of this,"],
+    [/\bInformed decisions\b/gi, "smart calls"],
+    [/\bDelve into\b/gi, "dig into"],
+    [/\bSeamless(ly)?\b/gi, "smooth"],
+    [/\bHarness(ing)? the power of\b/gi, "making the most of"],
+    [/\bOrganizations?\b/gi, m => m.toLowerCase() === 'organizations' ? 'companies' : 'Companies'],
+    [/\bEntities\b/gi, "groups"],
+  ];
+
+  replacements.forEach(([pattern, replacement]) => {
+    out = out.replace(pattern, replacement);
+  });
+
+  // Break up long sentences by splitting at semicolons and some conjunctions
+  out = out.replace(/;\s*/g, '. ');
+  out = out.replace(/,\s+(which|that) (enables?|allows?|helps?)\b/gi, ', and this');
+
+  // Add occasional contractions
+  out = out.replace(/\bdo not\b/gi, "don't");
+  out = out.replace(/\bcannot\b/gi, "can't");
+  out = out.replace(/\bwill not\b/gi, "won't");
+  out = out.replace(/\bshould not\b/gi, "shouldn't");
+  out = out.replace(/\bdoes not\b/gi, "doesn't");
+  out = out.replace(/\bwould not\b/gi, "wouldn't");
+  out = out.replace(/\bhas not\b/gi, "hasn't");
+  out = out.replace(/\bhave not\b/gi, "haven't");
+  out = out.replace(/\bit is\b/gi, "it's");
+  out = out.replace(/\bthat is\b/gi, "that's");
+  out = out.replace(/\bthey are\b/gi, "they're");
+  out = out.replace(/\bwe are\b/gi, "we're");
+  out = out.replace(/\byou are\b/gi, "you're");
+
+  // Clean up double spaces
+  out = out.replace(/  +/g, ' ').trim();
+
+  return out;
+}
+
+async function runHumanize() {
+  const text = document.getElementById('humanize-input').value.trim();
+  if (text.length < 30) {
+    alert('Please enter at least 30 characters to humanize.');
+    return;
+  }
+
+  const btn = document.getElementById('humanize-btn');
+  const inner = document.getElementById('humanize-btn-inner');
+  btn.disabled = true;
+  inner.innerHTML = '<span class="loader"></span> Humanizing...';
+
+  await new Promise(r => setTimeout(r, 1400));
+
+  const humanized = humanizeText(text);
+  const originalAnalysis = analyzeText(text);
+  const humanizedAnalysis = analyzeText(humanized);
+
+  btn.disabled = false;
+  inner.textContent = 'Humanize Text';
+
+  const reduction = originalAnalysis ? originalAnalysis.aiProb - (humanizedAnalysis?.aiProb || 0) : 0;
+
+  document.getElementById('humanize-result').innerHTML = `
+    <div class="result-card">
+      <div class="result-header">
+        <div>
+          <div class="result-label">Humanized Output</div>
+          <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:var(--green);margin-top:6px">✅ Transformation Complete</div>
+        </div>
+        ${originalAnalysis ? `<div style="text-align:right">
+          <div class="result-label">AI Score Reduced</div>
+          <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:var(--green)">-${Math.max(0,reduction)}%</div>
+        </div>` : ''}
+      </div>
+      <div class="output-box">
+        <div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Humanized Text</div>
+        <div class="output-text" id="humanized-text">${escapeHtml(humanized)}</div>
+      </div>
+      <div class="copy-row">
+        <button class="btn btn-ghost" onclick="copyHumanized()">📋 Copy Text</button>
+        <button class="btn btn-ghost" onclick="sendToDetect()">🔍 Check in Detector</button>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyHumanized() {
+  const text = document.getElementById('humanized-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy Text', 2000);
+  });
+}
+
+function sendToDetect() {
+  const text = document.getElementById('humanized-text').textContent;
+  document.getElementById('detect-input').value = text;
+  updateCharCount('detect-input','detect-count');
+  switchTab('detect');
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+</script>
+</body>
+</html>
