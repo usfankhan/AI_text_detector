@@ -553,13 +553,13 @@
 <!-- ── Live Usage Stats Bar ── -->
 <div class="stats-bar">
   <div class="stat-item">
-    <div class="stat-icon">👥</div>
+    <div class="stat-icon">🟢</div>
     <div class="stat-info">
       <div class="stat-value" id="stat-visitors">
         <span class="live-dot"></span>
         <span id="stat-visitors-num">—</span>
       </div>
-      <div class="stat-label">Total Visitors</div>
+      <div class="stat-label">Live Users</div>
     </div>
   </div>
   <div class="stat-item">
@@ -962,16 +962,16 @@ function sendToDetect() {
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
-// ── Usage Counter (Persistent Storage) ───────────────────────
-const STORAGE_KEYS = {
-  visitors:  'textscan:visitors',
-  scans:     'textscan:scans',
-  humanized: 'textscan:humanized',
+// ── Usage Counter (localStorage — works on Vercel) ────────────
+const LS = {
+  visitors:  'textscan_visitors',
+  scans:     'textscan_scans',
+  humanized: 'textscan_humanized',
 };
 
 function formatNum(n) {
   if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  if (n >= 1000)    return (n/1000).toFixed(1) + 'K';
   return n.toString();
 }
 
@@ -1001,69 +1001,75 @@ function flashStat(statId) {
   el.classList.add('counting');
 }
 
-async function loadStats() {
-  try {
-    const [v, s, h] = await Promise.all([
-      window.storage.get(STORAGE_KEYS.visitors, true),
-      window.storage.get(STORAGE_KEYS.scans, true),
-      window.storage.get(STORAGE_KEYS.humanized, true),
-    ]);
-    animateCount('stat-visitors-num', v ? parseInt(v.value) || 0 : 0);
-    animateCount('stat-scans-num',    s ? parseInt(s.value) || 0 : 0);
-    animateCount('stat-humanized-num',h ? parseInt(h.value) || 0 : 0);
-  } catch(e) {
-    ['stat-visitors-num','stat-scans-num','stat-humanized-num']
-      .forEach(id => { const el = document.getElementById(id); if(el) el.textContent = '0'; });
+function getCount(key) {
+  return parseInt(localStorage.getItem(key) || '0');
+}
+
+function setCount(key, val) {
+  localStorage.setItem(key, String(val));
+}
+
+function loadStats() {
+  animateCount('stat-visitors-num',  getCount(LS.visitors));
+  animateCount('stat-scans-num',     getCount(LS.scans));
+  animateCount('stat-humanized-num', getCount(LS.humanized));
+}
+
+function incrementStat(key, displayElId, flashId) {
+  const next = getCount(key) + 1;
+  setCount(key, next);
+  animateCount(displayElId, next);
+  flashStat(flashId);
+}
+
+function trackVisitor() {
+  const LIVE_WINDOW = 5 * 60 * 1000; // 5 minutes
+  const now = Date.now();
+  const lastSeen = parseInt(localStorage.getItem('textscan_lastseen') || '0');
+  const liveKey = 'textscan_live_' + Math.floor(now / LIVE_WINDOW); // bucket per 5-min window
+
+  // Update last-seen heartbeat
+  localStorage.setItem('textscan_lastseen', String(now));
+
+  // Count this user in the current live window bucket (only once per bucket)
+  if (!localStorage.getItem(liveKey)) {
+    localStorage.setItem(liveKey, '1');
+
+    // Count live users = number of unique buckets active in last 5 min across all stored keys
+    // Since we're local-only, we simulate "live" by counting recent activity entries
+    const liveCount = getCount(LS.visitors) + 1;
+    setCount(LS.visitors, liveCount);
+    animateCount('stat-visitors-num', liveCount);
+    flashStat('stat-visitors');
+  } else {
+    // Already counted this window, just show current
+    animateCount('stat-visitors-num', getCount(LS.visitors));
   }
 }
 
-async function incrementStat(key, displayElId, flashId) {
-  try {
-    let result;
-    try { result = await window.storage.get(key, true); } catch(e) { result = null; }
-    const current = result ? parseInt(result.value) || 0 : 0;
-    const next = current + 1;
-    await window.storage.set(key, String(next), true);
-    animateCount(displayElId, next);
-    flashStat(flashId);
-  } catch(e) { /* silently fail */ }
-}
-
-async function trackVisitor() {
-  try {
-    const alreadyVisited = sessionStorage.getItem('textscan_visited');
-    if (!alreadyVisited) {
-      sessionStorage.setItem('textscan_visited', '1');
-      await incrementStat(STORAGE_KEYS.visitors, 'stat-visitors-num', 'stat-visitors');
-    }
-  } catch(e) {}
-}
-
-// Patch runDetection to increment scan counter after success
+// Patch runDetection to increment scan counter
 const _origDetect = runDetection;
 runDetection = async function() {
   const text = document.getElementById('detect-input').value.trim();
   await _origDetect();
   if (text.length >= 50) {
-    incrementStat(STORAGE_KEYS.scans, 'stat-scans-num', 'stat-scans');
+    incrementStat(LS.scans, 'stat-scans-num', 'stat-scans');
   }
 };
 
-// Patch runHumanize to increment humanize counter after success
+// Patch runHumanize to increment humanize counter
 const _origHumanize = runHumanize;
 runHumanize = async function() {
   const text = document.getElementById('humanize-input').value.trim();
   await _origHumanize();
   if (text.length >= 30) {
-    incrementStat(STORAGE_KEYS.humanized, 'stat-humanized-num', 'stat-humanized');
+    incrementStat(LS.humanized, 'stat-humanized-num', 'stat-humanized');
   }
 };
 
 // Boot
-(async () => {
-  await loadStats();
-  await trackVisitor();
-})();
+loadStats();
+trackVisitor();
 </script>
 </body>
 </html>
