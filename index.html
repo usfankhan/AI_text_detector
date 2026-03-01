@@ -443,11 +443,101 @@
   }
   .notice a { color: var(--accent); text-decoration: none; }
 
+  /* ── Usage Counter Bar ── */
+  .stats-bar {
+    position: relative;
+    z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .stats-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0,229,255,0.03), transparent);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%,100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 28px;
+    border-right: 1px solid var(--border);
+    flex: 1;
+    justify-content: center;
+    max-width: 220px;
+  }
+  .stat-item:last-child { border-right: none; }
+
+  .stat-icon {
+    font-size: 1rem;
+    filter: grayscale(0.3);
+  }
+
+  .stat-info { display: flex; flex-direction: column; gap: 1px; }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stat-value .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse-dot {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  .stat-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .stat-value.counting {
+    animation: countFlash 0.4s ease;
+  }
+  @keyframes countFlash {
+    0% { color: var(--green); transform: scale(1.15); }
+    100% { color: var(--accent); transform: scale(1); }
+  }
+
   @media (max-width: 600px) {
     header { padding: 20px 20px; }
     main { padding: 32px 16px 60px; }
     .hero h1 { font-size: 2rem; }
     .features-grid { grid-template-columns: 1fr 1fr; }
+    .stats-bar { padding: 0 8px; gap: 0; }
+    .stat-item { padding: 10px 12px; max-width: none; }
+    .stat-value { font-size: 0.95rem; }
   }
 </style>
 </head>
@@ -459,6 +549,38 @@
   <div class="logo">Text<span>Scan</span></div>
   <div class="badge">AI Detection Engine</div>
 </header>
+
+<!-- ── Live Usage Stats Bar ── -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-icon">👥</div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-visitors">
+        <span class="live-dot"></span>
+        <span id="stat-visitors-num">—</span>
+      </div>
+      <div class="stat-label">Total Visitors</div>
+    </div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-icon">🔍</div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-scans">
+        <span id="stat-scans-num">—</span>
+      </div>
+      <div class="stat-label">Texts Analyzed</div>
+    </div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-icon">✏️</div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-humanized">
+        <span id="stat-humanized-num">—</span>
+      </div>
+      <div class="stat-label">Texts Humanized</div>
+    </div>
+  </div>
+</div>
 
 <main>
   <div class="hero">
@@ -505,7 +627,7 @@
 
   <p class="notice">
     This tool uses heuristic linguistic analysis. Results are probabilistic, not definitive.<br>
-    For best accuracy, use texts of 100+ words. &nbsp;|&nbsp; Built in Bharath <a href="https://www.linkedin.com/in/usfan-ali-khan/" target="_blank">LinkedIn </a>.
+    For best accuracy, use texts of 100+ words. &nbsp;|&nbsp; Built in Bharath 🇮🇳 by <a href="https://www.linkedin.com/in/usfan-ali-khan/" target="_blank">Usfan Ali Khan</a>.
   </p>
 </main>
 
@@ -839,6 +961,109 @@ function sendToDetect() {
   switchTab('detect');
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
+
+// ── Usage Counter (Persistent Storage) ───────────────────────
+const STORAGE_KEYS = {
+  visitors:  'textscan:visitors',
+  scans:     'textscan:scans',
+  humanized: 'textscan:humanized',
+};
+
+function formatNum(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function animateCount(elId, target) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const current = parseInt(el.textContent.replace(/[KM,.]/g,'')) || 0;
+  const diff = target - current;
+  if (diff === 0) { el.textContent = formatNum(target); return; }
+  const duration = 700;
+  const startTime = performance.now();
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    el.textContent = formatNum(Math.round(current + diff * ease));
+    if (t < 1) requestAnimationFrame(step);
+    else el.textContent = formatNum(target);
+  }
+  requestAnimationFrame(step);
+}
+
+function flashStat(statId) {
+  const el = document.getElementById(statId);
+  if (!el) return;
+  el.classList.remove('counting');
+  void el.offsetWidth;
+  el.classList.add('counting');
+}
+
+async function loadStats() {
+  try {
+    const [v, s, h] = await Promise.all([
+      window.storage.get(STORAGE_KEYS.visitors, true),
+      window.storage.get(STORAGE_KEYS.scans, true),
+      window.storage.get(STORAGE_KEYS.humanized, true),
+    ]);
+    animateCount('stat-visitors-num', v ? parseInt(v.value) || 0 : 0);
+    animateCount('stat-scans-num',    s ? parseInt(s.value) || 0 : 0);
+    animateCount('stat-humanized-num',h ? parseInt(h.value) || 0 : 0);
+  } catch(e) {
+    ['stat-visitors-num','stat-scans-num','stat-humanized-num']
+      .forEach(id => { const el = document.getElementById(id); if(el) el.textContent = '0'; });
+  }
+}
+
+async function incrementStat(key, displayElId, flashId) {
+  try {
+    let result;
+    try { result = await window.storage.get(key, true); } catch(e) { result = null; }
+    const current = result ? parseInt(result.value) || 0 : 0;
+    const next = current + 1;
+    await window.storage.set(key, String(next), true);
+    animateCount(displayElId, next);
+    flashStat(flashId);
+  } catch(e) { /* silently fail */ }
+}
+
+async function trackVisitor() {
+  try {
+    const alreadyVisited = sessionStorage.getItem('textscan_visited');
+    if (!alreadyVisited) {
+      sessionStorage.setItem('textscan_visited', '1');
+      await incrementStat(STORAGE_KEYS.visitors, 'stat-visitors-num', 'stat-visitors');
+    }
+  } catch(e) {}
+}
+
+// Patch runDetection to increment scan counter after success
+const _origDetect = runDetection;
+runDetection = async function() {
+  const text = document.getElementById('detect-input').value.trim();
+  await _origDetect();
+  if (text.length >= 50) {
+    incrementStat(STORAGE_KEYS.scans, 'stat-scans-num', 'stat-scans');
+  }
+};
+
+// Patch runHumanize to increment humanize counter after success
+const _origHumanize = runHumanize;
+runHumanize = async function() {
+  const text = document.getElementById('humanize-input').value.trim();
+  await _origHumanize();
+  if (text.length >= 30) {
+    incrementStat(STORAGE_KEYS.humanized, 'stat-humanized-num', 'stat-humanized');
+  }
+};
+
+// Boot
+(async () => {
+  await loadStats();
+  await trackVisitor();
+})();
 </script>
 </body>
 </html>
